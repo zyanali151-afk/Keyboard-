@@ -3,14 +3,16 @@ package com.zyanali.keyboard
 import android.bluetooth.*
 import android.content.Context
 import android.os.ParcelUuid
+import java.util.concurrent.Executors
 
 class HidManager(private val context: Context) {
 
     private var hidDevice: BluetoothHidDevice? = null
     private var connectedDevice: BluetoothDevice? = null
     var statusCallback: ((String) -> Unit)? = null
-
     private var modifierState: Byte = 0
+
+    private val executor = Executors.newSingleThreadExecutor()
 
     companion object {
         val HID_SERVICE_UUID: ParcelUuid =
@@ -51,27 +53,27 @@ class HidManager(private val context: Context) {
                     KEYBOARD_DESCRIPTOR
                 )
 
-                val ok = hidDevice?.registerApp(sdp, null, null, { it.run() },
-                    object : BluetoothHidDevice.Callback() {
-                        override fun onAppStatusChanged(pluggedDevice: BluetoothDevice?, registered: Boolean) {
-                            statusCallback?.invoke(
-                                if (registered) "✅ Registered — pair with TV" else "❌ Registration failed"
-                            )
-                        }
-                        override fun onConnectionStateChanged(device: BluetoothDevice?, state: Int) {
-                            when (state) {
-                                BluetoothProfile.STATE_CONNECTED -> {
-                                    connectedDevice = device
-                                    statusCallback?.invoke("✅ Connected: ${device?.name}")
-                                }
-                                BluetoothProfile.STATE_DISCONNECTED -> {
-                                    connectedDevice = null
-                                    statusCallback?.invoke("Disconnected")
-                                }
+                val callback = object : BluetoothHidDevice.Callback() {
+                    override fun onAppStatusChanged(pluggedDevice: BluetoothDevice?, registered: Boolean) {
+                        statusCallback?.invoke(
+                            if (registered) "✅ Registered — pair with TV" else "❌ Registration failed"
+                        )
+                    }
+                    override fun onConnectionStateChanged(device: BluetoothDevice?, state: Int) {
+                        when (state) {
+                            BluetoothProfile.STATE_CONNECTED -> {
+                                connectedDevice = device
+                                statusCallback?.invoke("✅ Connected: ${device?.name}")
+                            }
+                            BluetoothProfile.STATE_DISCONNECTED -> {
+                                connectedDevice = null
+                                statusCallback?.invoke("Disconnected")
                             }
                         }
                     }
-                )
+                }
+
+                val ok = hidDevice?.registerApp(sdp, null, null, executor, callback)
                 if (ok != true) statusCallback?.invoke("❌ registerApp returned false")
             }
 
